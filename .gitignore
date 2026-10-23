@@ -1,0 +1,19 @@
+# Répertoires de compilation SBT
+target/
+project/target/
+project/project/
+
+# Caches d'IDE (VS Code / Metals / IntelliJ)
+.metals/
+.bsp/
+.idea/
+*.iml
+.vscode/
+
+# Fichiers système et logs
+.DS_Store
+*.log
+
+# Dossier de sortie des données générées
+output/
+
