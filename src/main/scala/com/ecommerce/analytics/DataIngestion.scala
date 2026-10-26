@@ -2,19 +2,16 @@ package com.ecommerce.analytics
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions.col
 import com.ecommerce.models._
 import com.ecommerce.utils.ConfigLoader
 import scala.util.{Try, Success, Failure}
 
-/* Cette classe gère le chargement des 4 fichiers
-d'entrée (transactions.csv, users.json, products.parquet et merchants.csv)
-en sécurisant la lecture avec des blocs Try/Catch et en appliquant
-un typage fort (Dataset[T]). */
 
 class DataIngestion(implicit spark: SparkSession) {
   import spark.implicits._
 
-  // 1. Ingestion des transactions (CSV avec schéma explicite)
+  //Ingestion des transactions (CSV avec schéma explicite)
   def loadTransactions(): Dataset[Transaction] = {
     Try {
       val schema = StructType(Array(
@@ -38,11 +35,12 @@ class DataIngestion(implicit spark: SparkSession) {
     }
   }
 
-  // 2. Ingestion des utilisateurs (JSON)
+  //Ingestion des utilisateurs (JSON) avec cast explicite de l'âge
   def loadUsers(): Dataset[User] = {
     Try {
       spark.read
         .json(ConfigLoader.usersPath)
+        .withColumn("age", col("age").cast("integer"))
         .as[User]
     } match {
       case Success(ds) => ds
@@ -50,7 +48,7 @@ class DataIngestion(implicit spark: SparkSession) {
     }
   }
 
-  // 3. Ingestion des produits (Parquet)
+  //Ingestion des produits (Parquet)
   def loadProducts(): Dataset[Product] = {
     Try {
       spark.read
@@ -62,7 +60,7 @@ class DataIngestion(implicit spark: SparkSession) {
     }
   }
 
-  // 4. Ingestion des marchands (CSV avec inférence de schéma)
+  //Ingestion des marchands (CSV avec inférence de schéma)
   def loadMerchants(): Dataset[Merchant] = {
     Try {
       spark.read

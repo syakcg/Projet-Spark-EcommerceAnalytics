@@ -2,6 +2,7 @@ package com.ecommerce.analytics
 
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.expressions.Window
+import com.ecommerce.utils.TimeFeatures
 import org.apache.spark.sql.functions._
 import com.ecommerce.models._
 
@@ -15,7 +16,7 @@ class DataTransformation(implicit spark: SparkSession) {
     merchants: Dataset[Merchant]
   ): DataFrame = {
 
-    // 1. Application de l'UDF temporelle et aplatissement des colonnes
+    //Application de l'UDF temporelle et aplatissement des colonnes
     val txsWithTime = txs
       .withColumn("time_features", TimeFeatures.extractTimeFeaturesUDF(col("timestamp")))
       .select(
@@ -29,13 +30,31 @@ class DataTransformation(implicit spark: SparkSession) {
       )
       .drop("time_features")
 
-    // 2. Jointures d'enrichissement (Left Joins)
-    val enriched = txsWithTime
-      .join(users, Seq("user_id"), "left")
-      .join(products, Seq("product_id"), "left")
-      .join(merchants, Seq("merchant_id"), "left")
+    //Nettoyage et renommage rigoureux pour éviter toute collision de colonnes
+    val usersClean = users
+      .withColumnRenamed("region", "user_region")
+      .withColumnRenamed("name", "user_name")
+      .withColumnRenamed("user_id", "u_id")
 
-    // 3. Fenêtrages analytiques par utilisateur
+    val productsClean = products
+      .withColumnRenamed("name", "product_name")
+      .withColumnRenamed("product_id", "p_id")
+      .withColumnRenamed("merchant_id", "product_merchant_id") 
+
+    val merchantsClean = merchants
+      .withColumnRenamed("name", "merchant_name")
+      .withColumnRenamed("merchant_id", "m_id")
+
+    //Jointures explicites sans ambiguïté et suppression des ID temporaires
+    val enriched = txsWithTime
+      .join(usersClean, txsWithTime("user_id") === usersClean("u_id"), "left")
+      .drop("u_id")
+      .join(productsClean, txsWithTime("product_id") === productsClean("p_id"), "left")
+      .drop("p_id")
+      .join(merchantsClean, txsWithTime("merchant_id") === merchantsClean("m_id"), "left")
+      .drop("m_id")
+
+    //Fenêtrages analytiques par utilisateur
     val userOrderWindow = Window.partitionBy("user_id").orderBy("timestamp")
     val userGlobalWindow = Window.partitionBy("user_id")
 
@@ -43,7 +62,7 @@ class DataTransformation(implicit spark: SparkSession) {
       .withColumn("transaction_rank", rank().over(userOrderWindow))
       .withColumn("total_user_transactions", count("transaction_id").over(userGlobalWindow))
 
-    // 4. Segmentation par tranche d'âge
+    //Segmentation par tranche d'âge
     withWindowMetrics.withColumn("age_group",
       when(col("age") < 25, "Jeune")
       .when(col("age").between(25, 44), "Adulte")
@@ -52,7 +71,7 @@ class DataTransformation(implicit spark: SparkSession) {
     )
   }
 
-  // 5. Calcul du montant cumulé sur une fenêtre glissante de 7 jours (7 * 24 * 3600 = 604800 s)
+  //Calcul du montant cumulé sur une fenêtre glissante de 7 jours
   def add7DaysRollingMetrics(df: DataFrame): DataFrame = {
     val timestampInSec = to_timestamp(col("timestamp"), "yyyyMMddHHmmss").cast("long")
     val window7Days = Window.partitionBy("user_id").orderBy(timestampInSec).rangeBetween(-604800, 0)
