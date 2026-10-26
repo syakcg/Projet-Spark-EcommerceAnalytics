@@ -2,27 +2,6 @@
 
 Nous retraçons  le journal des contributions individuelles et collectives réalisées lors du développement du projet **EcommerceAnalytics**.
 
----
-
-## Partie 1 : Infrastructure, Configuration et Modélisation (Membre A)
-* **Configuration du projet SBT** : Création de `build.sbt` avec déclaration des dépendances Spark 3.4.1, Typesafe Config et ScalaTest.
-* **Externalisation de la configuration** : Rédaction de `application.conf` (HOCON) pour centraliser les chemins d'accès, paramètres Spark (`master`, `shuffle.partitions`) et seuils métier.
-* **Développement du chargeur de configuration** : Création du singleton `ConfigLoader.scala` avec résolution des conflits d'importation de packages (`_root_.com.typesafe`).
-* **Modélisation typée** : Définition des `case class` Scala dans `Models.scala` pour garantir le typage fort sur les `Dataset[T]`.
-
----
-## Partie 2 : Ingestion Multi-format et Contrôle Qualité (Membre A)
-* **Ingestion sécurisée (`DataIngestion.scala`)** :
-    * Implémentation du chargement explicite CSV pour `transactions.csv`.
-    * Ingestion JSON pour `users.json`.
-    * Ingestion Parquet optimisée pour `products.parquet`.
-    * Encapsulation des lectures dans des blocs `Try/Catch` pour la tolérance aux pannes.
-* **Validation et Gestion des rejets (`DataValidation.scala`)** :
-    * Application des règles de validation métier sur le montant, l'âge, les notes et taux de commission.
-    * Tagging automatique des enregistrements invalides avec `withColumn("rejection_reason", ...)`.
-    * Implémentation de la méthode `generateQualityReport` calculant le taux de rejet (%) et le comptage global des valeurs nulles.
-
-
 ## 1. Tableau Récapitulatif des Tâches
 
 | Question / Module du Projet | Membre Responsable | Membre Relecteur |
@@ -36,7 +15,24 @@ Nous retraçons  le journal des contributions individuelles et collectives réal
 | **Partie 6.1 et [6.2 (Bonus)]** (Application principale `MainApp` et Exécution modulaire) | Membre C | Validé par tout le groupe |
 | **Partie 7** (Configuration externalisée `application.conf`) | Membre A | Membre C |
 
----
+
+## Partie 1 : Infrastructure, Configuration et Modélisation (Membre A)
+* **Configuration du projet SBT** : Création de `build.sbt` avec déclaration des dépendances Spark 3.4.1, Typesafe Config et ScalaTest.
+* **Externalisation de la configuration** : Rédaction de `application.conf` (HOCON) pour centraliser les chemins d'accès, paramètres Spark (`master`, `shuffle.partitions`) et seuils métier.
+* **Développement du chargeur de configuration** : Création du singleton `ConfigLoader.scala` avec résolution des conflits d'importation de packages (`_root_.com.typesafe`).
+* **Modélisation typée** : Définition des `case class` Scala dans `Models.scala` pour garantir le typage fort sur les `Dataset[T]`.
+
+## Partie 2 : Ingestion Multi-format et Contrôle Qualité (Membre A)
+* **Ingestion sécurisée (`DataIngestion.scala`)** :
+    * Implémentation du chargement explicite CSV pour `transactions.csv`.
+    * Ingestion JSON pour `users.json`.
+    * Ingestion Parquet optimisée pour `products.parquet`.
+    * Encapsulation des lectures dans des blocs `Try/Catch` pour la tolérance aux pannes.
+* **Validation et Gestion des rejets (`DataValidation.scala`)** :
+    * Application des règles de validation métier sur le montant, l'âge, les notes et taux de commission.
+    * Tagging automatique des enregistrements invalides avec `withColumn("rejection_reason", ...)`.
+    * Implémentation de la méthode `generateQualityReport` calculant le taux de rejet (%) et le comptage global des valeurs nulles.
+
 
 ## 2. Bilan Individuel — Membre C
 
@@ -47,7 +43,6 @@ Nous retraçons  le journal des contributions individuelles et collectives réal
 * Risque de saturation de la mémoire vive (*Out of Memory*) lors du traitement et de la jointure de volumes de données volumineux *(Solution : Configuration fine des niveaux de persistance sérialisée avec `MEMORY_AND_DISK_SER`)*.
 * Risque de plantage de l'application ou d'exceptions non gérées en cas de saisie d'un paramètre incorrect par un utilisateur *(Solution : Gestion rigoureuse du parsing des arguments en ligne de commande et mise en place d'un guide d'aide textuel dans `MainApp.scala`)*.
 
----
 
 ## 3. Décisions Techniques du Groupe
 
@@ -62,17 +57,15 @@ Nous retraçons  le journal des contributions individuelles et collectives réal
 3. **Gestion intelligente du stockage (`cache()` et `persist`) :**
 * *Justification :* L'application de `.cache()` sur le DataFrame des transactions réutilisé évite des relectures disques redondantes. Pour les tables issues de jointures lourdes, l'utilisation de `persist(StorageLevel.MEMORY_AND_DISK_SER)` compresse les objets en mémoire et bascule sur le disque en cas de dépassement de RAM.
 
-
 4. **Double format de sortie des résultats (CSV et Parquet) :**
 * *Justification :* L'export au format CSV a été retenu pour faciliter la lecture directe et le contrôle humain des résultats, tandis que le format Parquet a été choisi pour sa compression colonnaire hautement performante, standard de l'écosystème Big Data.
-
 
 5. **Architecture modulaire de l'application (`MainApp.scala`) :**
 * *Justification :* L'implémentation d'un système d'arguments en ligne de commande (`ingestion`, `transformation`, `analytics`, `all`) permet à chaque membre du groupe de tester isolément sa brique fonctionnelle sans avoir à exécuter l'intégralité du pipeline à chaque itération.
 
----
+## Bilan de Relecture — Rôle de Relecteur - Membre C
 
-## Bilan de Relecture — Rôle de Relecteur - Membre C (Partie 1 / Membre A)
+### Partie 1 fait par le Membre A
 
 * **Module relu :** Partie 1 (Initialisation de l'environnement, structure du projet et configuration SBT).
 * **Date de l'échange après relecture :** 23 octobre 2026 à 17h00.
@@ -80,4 +73,10 @@ Nous retraçons  le journal des contributions individuelles et collectives réal
 * **Difficultés rencontrées lors de la relecture :**
 * Impossibilité initiale d'exécuter et de tester le code en local *(Solution : Identification et correction collective d'une configuration inadaptée dans le fichier `build.sbt` qui bloquait les tests locaux, permettant ainsi de rétablir une compilation stable)*.
 
----
+## Partie 7 fait par le Membre A
+
+* **Module relu :** Partie 7 (Configuration externalisée via le fichier `application.conf`).
+* **Date de l'échange après relecture : 26 Octobre 2026 à 10h.
+* **Format de l'interaction :** Relecture croisée et audit du fichier de configuration pour valider l'absence de paramètres codés en dur et la conformité avec l'énoncé.
+* **Difficultés rencontrées lors de la relecture :**
+* Omission initiale du bloc de configuration `optimization` (contenant `enable-cache` et `enable-broadcast`) pourtant présent dans le modèle de l'énoncé *(Solution : Remontée de la critique constructive au collaborateur et intégration du bloc manquant dans `application.conf` pour garantir la compatibilité avec les scripts d'optimisation Spark)*.
