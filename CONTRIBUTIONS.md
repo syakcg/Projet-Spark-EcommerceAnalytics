@@ -2,6 +2,14 @@
 
 Nous retraçons  le journal des contributions individuelles et collectives réalisées lors du développement du projet **EcommerceAnalytics**.
 
+## Tableau Récapitulatif des Tâches
+
+| Question / Module du Projet | Membre Responsable | Membre Relecteur |
+| --- | --- | --- |
+| **Partie 1** (Initialisation de l'environnement, SBT et structure du projet) | Membre A | Membre C |
+| **Partie 2** ( INGESTION ET VALIDATION DES DONNÉES) | Membre A | Membre B |
+
+---
 ---
 
 ## Partie 1 : Infrastructure, Configuration & Modélisation (Membre A)
