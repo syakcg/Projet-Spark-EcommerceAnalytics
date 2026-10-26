@@ -1,14 +1,16 @@
 package com.ecommerce.analytics
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.StorageLevel
 import com.typesafe.config.ConfigFactory
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import com.ecommerce.models._
 
 object MainApp {
 
-  // Fonction utilitaire pour mesurer, afficher l'heure et la durée d'une étape
+  //Fonction pour mesurer, afficher l'heure et la durée d'une étape
   def measureTime[T](stepName: String)(block: => T): T = {
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     val startTime = LocalDateTime.now()
@@ -30,18 +32,20 @@ object MainApp {
     //Récupération de l'argument (par défaut "all" si aucun argument n'est fourni)
     val step = if (args.length > 0) args(0).toLowerCase else "all"
 
-    //Validation de l'argument et message d'aide si inconnu
-    val validSteps = Set("ingestion", "transformation", "analytics", "all")
+    //Validation de l'argument et guide d'aide complet
+    val validSteps = Set("ingestion", "transformation", "rfm", "optimizations", "analytics", "all")
     if (!validSteps.contains(step)) {
       println(s"\n[ATTENTION] Argument inconnu : '$step'")
-      println("==================================================")
-      println("=== GUIDE D'AIDE - Valeurs acceptées :         ===")
-      println("==================================================")
-      println("  sbt \"run ingestion\"      -> Exécute uniquement l'ingestion")
-      println("  sbt \"run transformation\" -> Exécute uniquement la transformation")
-      println("  sbt \"run analytics\"      -> Exécute l'analytique et la sauvegarde")
-      println("  sbt \"run all\"            -> Exécute tout le pipeline (Défaut)")
-      println("==================================================")
+      println("==================================================================")
+      println("=== GUIDE D'AIDE - Valeurs acceptées pour le projet global :   ===")
+      println("==================================================================")
+      println("  sbt \"run ingestion\"      -> Exécute l'ingestion (Membre B)")
+      println("  sbt \"run transformation\" -> Exécute la transformation (Membre B)")
+      println("  sbt \"run rfm\"            -> Exécute l'analytique & RFM (Membre C)")
+      println("  sbt \"run optimizations\"  -> Exécute les optimisations Spark (Membre C)")
+      println("  sbt \"run analytics\"      -> Exécute le rapport global consolidé")
+      println("  sbt \"run all\"            -> Exécute tout le pipeline de bout en bout")
+      println("==================================================================")
       return 
     }
 
@@ -60,58 +64,94 @@ object MainApp {
       spark.sparkContext.setLogLevel("WARN")
       println(s"=== [INIT] Session Spark démarrée pour l'étape : $step ===")
 
-      //Variables de travail du pipeline
-      var dfTransactions: org.apache.spark.sql.DataFrame = null
-      var dfMerchants: org.apache.spark.sql.DataFrame = null
-      var dfUsers: org.apache.spark.sql.DataFrame = null
-      var dfTransMerchant: org.apache.spark.sql.DataFrame = null
+      //Instanciation des classes
+      val ingestion = new DataIngestion()(spark)
+      val transformation = new DataTransformation()(spark)
+
+      var dsTransactions: Dataset[Transaction] = null
+      var dsUsers: Dataset[User] = null
+      var dsProducts: Dataset[Product] = null
+      var dsMerchants: Dataset[Merchant] = null
+      var dfTransFinal: DataFrame = null
 
       //INGESTION
-      if (step == "ingestion" || step == "all") {
-        measureTime("Ingestion") {
-          dfTransactions = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/transactions.csv")
-          dfMerchants = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/merchants.csv").withColumnRenamed("category", "merchant_category")
-          dfUsers = spark.read.option("multiline", "true").json("src/main/resources/data/users.json")
-          println(s"-> Chargés : ${dfTransactions.count()} transactions, ${dfMerchants.count()} marchands, ${dfUsers.count()} utilisateurs.")
-        }
+      if (Set("ingestion", "transformation", "rfm", "optimizations", "analytics", "all").contains(step)) {
+        dsTransactions = ingestion.loadTransactions()
+        dsUsers = ingestion.loadUsers()
+        dsProducts = ingestion.loadProducts()
+        dsMerchants = ingestion.loadMerchants()
       }
 
-      if (step == "transformation" || step == "analytics") {
-        dfTransactions = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/transactions.csv")
-        dfMerchants = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/merchants.csv").withColumnRenamed("category", "merchant_category")
+      if (step == "ingestion") {
+        measureTime("Ingestion (Membre B)") {
+          println(s"-> Chargés avec succès : ${dsTransactions.count()} transactions, ${dsMerchants.count()} marchands, ${dsUsers.count()} utilisateurs.")
+        }
       }
 
       //TRANSFORMATION
-      if (step == "transformation" || step == "all") {
-        measureTime("Transformation") {
-          val dfTransactionsValid = dfTransactions.filter(col("amount").isNotNull && col("amount") > 0)
-          dfTransMerchant = dfTransactionsValid
-            .join(dfMerchants, Seq("merchant_id"), "left")
-            .withColumn("commission_calculee", col("amount") * col("commission_rate"))
-          println(s"-> Données transformées et jointes. Lignes valides : ${dfTransMerchant.count()}")
+      if (Set("transformation", "rfm", "optimizations", "analytics", "all").contains(step)) {
+        val dfEnriched = transformation.enrichTransactionData(dsTransactions, dsUsers, dsProducts, dsMerchants)
+        dfTransFinal = transformation.add7DaysRollingMetrics(dfEnriched)
+      }
+
+      if (step == "transformation") {
+        measureTime("Transformation (Membre B)") {
+          println(s"-> Données transformées et enrichies. Lignes totales : ${dfTransFinal.count()}")
         }
       }
 
-      //ANALYTICS & SAUVEGARDE
-      if (step == "analytics" || step == "all") {
-        if (dfTransMerchant == null) {
-          val dfValid = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/transactions.csv").filter(col("amount").isNotNull && col("amount") > 0)
-          val dfM = spark.read.option("header", "true").option("inferSchema", "true").csv("src/main/resources/data/merchants.csv").withColumnRenamed("category", "merchant_category")
-          dfTransMerchant = dfValid.join(dfM, Seq("merchant_id"), "left").withColumn("commission_calculee", col("amount") * col("commission_rate"))
-        }
+      //ANALYTIQUE & RFM
+      if (step == "rfm" || step == "all") {
+        measureTime("Analytique & Segmentation RFM (Membre C)") {
+          println("--- EXÉCUTION DE LA SEGMENTATION RFM ET COHORTES ---")
+          
+          val rfmCalculated = dfTransFinal
+            .groupBy("user_id")
+            .agg(
+              max("timestamp").as("last_purchase_date"),
+              count("transaction_id").as("frequency"),
+              sum("amount").as("monetary")
+            )
 
-        measureTime("Analytique & Sauvegarde") {
-          val rapportFinal = dfTransMerchant
-            .groupBy("merchant_id", "name", "region", "merchant_category")
+          println("=== APERÇU DE LA SEGMENTATION RFM (Top 10) ===")
+          rfmCalculated.show(10, false)
+        }
+      }
+
+      //OPTIMISATIONS SPARK
+      if (step == "optimizations" || step == "all") {
+        measureTime("Optimisations Spark (Membre C)") {
+          println("--- EXÉCUTION DES STRATÉGIES DE CACHE & BROADCAST ---")
+          
+          dfTransFinal.cache()
+          val countTrans = dfTransFinal.count()
+          println(s"[Optimisation Stockage] Nombre de transactions en cache : $countTrans")
+
+          val dfBroadcastResult = dfTransFinal
+            .join(broadcast(dsMerchants.toDF()), Seq("merchant_id"), "left")
+            .groupBy("region", "merchant_id")
+            .agg(sum("amount").as("ca_region"))
+
+          println("=== APERÇU DE LA JOINTURE OPTIMISÉE (BROADCAST) ===")
+          dfBroadcastResult.show(5, false)
+
+          dfTransFinal.unpersist()
+          println("[Optimisation Stockage] Mémoire libérée proprement via unpersist().")
+        }
+      }
+
+      //ANALYTICS GLOBAL & SAUVEGARDE
+      if (step == "analytics" || step == "all") {
+        measureTime("Rapport Global & Sauvegarde") {
+          val rapportFinal = dfTransFinal
+            .groupBy("region", "merchant_id")
             .agg(
               sum("amount").as("ca_total"),
               count("transaction_id").as("nb_transactions"),
-              countDistinct("user_id").as("nb_clients_uniques"),
-              avg("amount").as("montant_moyen"),
-              sum("commission_calculee").as("commission_totale")
+              avg("amount").as("montant_moyen")
             )
 
-          println("=== RÉSULTATS ANALYTIQUES (Top 10) ===")
+          println("=== RÉSULTATS FINAUX (Top 10) ===")
           rapportFinal.show(10, false)
 
           val outputCsvPath = "src/main/resources/output/merchant_report_csv"
@@ -119,11 +159,11 @@ object MainApp {
 
           rapportFinal.write.option("header", "true").mode("overwrite").csv(outputCsvPath)
           rapportFinal.write.mode("overwrite").parquet(outputParquetPath)
-          println(s"-> Résultats sauvegardés en CSV et Parquet dans src/main/resources/output/")
+          println(s"-> Résultats exportés en CSV et Parquet dans src/main/resources/output/")
         }
       }
 
-      println(s"\n=== [SUCCÈS] Exécution globale de l'étape '$step' réussie ===")
+      println(s"\n=== [SUCCÈS] Exécution de l'étape '$step' terminée avec succès ===")
 
     } catch {
       case ex: Throwable =>

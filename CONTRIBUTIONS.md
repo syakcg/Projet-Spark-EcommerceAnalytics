@@ -27,10 +27,14 @@ Nous retraçons  le journal des contributions individuelles et collectives réal
 
 | Question / Module du Projet | Membre Responsable | Membre Relecteur |
 | --- | --- | --- |
+| **Partie 1** (Initialisation de l'environnement, SBT et structure du projet) | Membre A | Membre C |
+| **Partie 2** ( INGESTION ET VALIDATION DES DONNÉES) | Membre A | Membre B |
+| **Partie 3** ( TRANSFORMATIONS AVANCÉES ) | Membre B | Membre A |
 | **Partie 4.1 et 4.2** (Rapports marchands et Analyse de cohortes utilisateurs) | Membre C | Membre B |
-| **Partie 4.3 - (Bonus)** (Segmentation RFM ) | Membre C | Membre B |
-| **Partie 5.1 et 5.2** (Optimisations : Cache, Persist, Broadcast, Jointures) | Membre C | Membre A et Membre B|
+| **Partie 4.3 - (Bonus)** (Segmentation RFM) | Membre C | Membre B |
+| **Partie 5.1 et 5.2** (Optimisations : Cache, Persist, Broadcast, Jointures) | Membre C | Membre A et Membre B |
 | **Partie 6.1 et [6.2 (Bonus)]** (Application principale `MainApp` et Exécution modulaire) | Membre C | Validé par tout le groupe |
+| **Partie 7** (Configuration externalisée `application.conf`) | Membre A | Membre C |
 
 ---
 
